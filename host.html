@@ -1,0 +1,40 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dawat RSVP – host</title><link rel="stylesheet" href="/style.css"></head>
+<body><div class="wrap"><h1>Dawat RSVP</h1><p class="sub">Made for Muslim weddings in Bangalore. Know who’s coming before the caterer asks.</p>
+<div class="chips" id="fc"></div><div class="card" id="dash"></div>
+<div class="card"><h2>Food for the caterer</h2><div id="food"></div><button class="sec full" id="sheet">Copy caterer sheet</button><pre id="pre" hidden></pre></div>
+<div class="card"><h2>Guest households</h2><div id="list"></div></div>
+<div class="card"><h2>Add a household</h2><label for="n">Name</label><input id="n" placeholder="Siddiqui family">
+<div class="two"><div><label for="p">WhatsApp number</label><input id="p" inputmode="tel" placeholder="98450 12345"></div><div><label for="c">People invited</label><input id="c" type="number" min="1" max="30" value="4"></div></div>
+<div class="err" id="ae"></div><button class="full" id="add">Add household</button></div>
+<div class="card"><h2>Your functions</h2><p class="sub" style="margin-top:0">Tap to remove. Add whatever your family holds.</p><div class="chips" id="fe"></div>
+<div class="two"><input id="nf" placeholder="e.g. Dholki" maxlength="24" aria-label="New function"><button id="addf">Add function</button></div></div></div>
+<script>
+var S,cur="All",FL={nonveg:"Non-veg (halal)",veg:"Vegetarian",kids:"Kids meal",special:"Special diet or allergy"};
+function $(i){return document.getElementById(i)}function e(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function api(u,m,b){return fetch(u,{method:m||"GET",headers:{"content-type":"application/json"},body:b?JSON.stringify(b):undefined}).then(function(r){return r.json()})}
+function load(){return api("/api/host/state").then(function(s){S=s;draw()})}
+function inF(h){return cur==="All"||h.fns.indexOf(cur)>-1}
+function stats(){var r={inv:0,conf:0,no:0,wait:0,food:{nonveg:0,veg:0,kids:0,special:0}};
+ S.households.forEach(function(h){r.inv+=h.invited;if(h.status==="pending")r.wait+=h.invited;else if(h.status==="yes"&&inF(h)){r.conf+=h.going;for(var k in r.food)r.food[k]+=(h.food[k]||0)}else r.no+=h.invited});
+ r.exp=r.conf+Math.round(r.wait*.4);return r}
+function draw(){var s=stats(),p=function(n){return(s.inv?n/s.inv*100:0)+"%"};
+ $("fc").innerHTML=["All"].concat(S.fns).map(function(f){return'<button class="chip" data-f="'+e(f)+'" aria-pressed="'+(f===cur)+'">'+(f==="All"?"All functions":e(f))+'</button>'}).join("");
+ $("dash").innerHTML='<div class="sub" style="margin:0">Total invited</div><div class="big">'+s.inv+'</div><div class="bar"><i style="width:'+p(s.conf)+';background:var(--yes)"></i><i style="width:'+p(s.no)+';background:var(--no)"></i><i style="width:'+p(s.wait)+';background:var(--wait)"></i></div>'+
+ '<div class="row"><span>Confirmed</span><span class="num">'+s.conf+'</span></div><div class="row"><span>Not attending</span><span class="num">'+s.no+'</span></div><div class="row"><span>Awaiting response</span><span class="num">'+s.wait+'</span></div>'+
+ '<div class="plan">Plan for '+s.exp+' guests<small>'+s.conf+' confirmed plus about 40% of the '+s.wait+' who haven’t replied. RSVPs are estimates, so keep a small buffer.</small></div>';
+ $("food").innerHTML=S.foods.map(function(k){return'<div class="row"><span>'+FL[k]+'</span><span class="num">'+s.food[k]+'</span></div>'}).join("");
+ $("list").innerHTML=S.households.map(function(h){var t=h.status==="yes"?"Coming ("+h.going+")":h.status==="no"?"Can’t come":"No reply";
+  return'<div class="g"><div><b>'+e(h.name)+'</b><small>'+h.invited+' invited'+(h.status==="yes"?" · "+h.fns.map(e).join(", "):"")+'</small></div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><span class="tag '+h.status+'">'+t+'</span><button class="wa" data-r="'+h.id+'">'+(h.remindedAt?"Resend":"WhatsApp")+'</button><button class="sec" style="padding:6px 10px;font-size:14px" data-c="'+e(h.link)+'">Copy link</button><button class="sec" style="padding:6px 10px;font-size:14px" data-x="'+h.id+'" aria-label="Delete '+e(h.name)+'">✕</button></div></div>'}).join("")||'<p class="sub">No households yet.</p>';
+ $("fe").innerHTML=S.fns.map(function(f){return'<button class="chip" data-rf="'+e(f)+'">'+e(f)+' ✕</button>'}).join("")}
+document.addEventListener("click",function(ev){var t=ev.target.closest("button");if(!t||!S)return;
+ if(t.dataset.f){cur=t.dataset.f;draw()}
+ else if(t.dataset.r){api("/api/host/households/"+t.dataset.r+"/remind","POST").then(function(j){if(j.error)alert(j.error);else if(j.wa)window.open(j.wa,"_blank");else alert("WhatsApp message sent.");load()})}
+ else if(t.dataset.c){var u=t.dataset.c;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(function(){t.textContent="Copied"},function(){prompt("Copy this link",u)})}
+ else if(t.dataset.x){if(confirm("Delete this household?"))api("/api/host/households/"+t.dataset.x,"DELETE").then(load)}
+ else if(t.dataset.rf){api("/api/host/fns","POST",{fns:S.fns.filter(function(f){return f!==t.dataset.rf})}).then(function(j){if(j.error)alert(j.error);if(cur===t.dataset.rf)cur="All";load()})}
+ else if(t.id==="addf"){var v=$("nf").value.trim();if(v)api("/api/host/fns","POST",{fns:S.fns.concat(v)}).then(function(){$("nf").value="";load()})}
+ else if(t.id==="add"){api("/api/host/households","POST",{name:$("n").value,phone:$("p").value,invited:$("c").value}).then(function(j){$("ae").textContent=j.error||"";if(!j.error){$("n").value="";$("p").value="";load()}})}
+ else if(t.id==="sheet"){var s=stats(),x="Caterer sheet - "+(cur==="All"?"all functions":cur)+"\nConfirmed: "+s.conf+"\nNot yet replied: "+s.wait+"\nSuggested plan: "+s.exp+"\n\n"+S.foods.map(function(k){return FL[k]+": "+s.food[k]}).join("\n");
+  $("pre").hidden=false;$("pre").textContent=x;try{navigator.clipboard.writeText(x)}catch(z){}}});
+load();setInterval(function(){if(document.visibilityState==="visible")load()},10000);
+</script></body></html>
